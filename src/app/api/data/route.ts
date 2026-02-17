@@ -31,27 +31,32 @@ export async function GET(request: NextRequest) {
 
     if (!type) {
       // Return all data
-      const [pelanggan, produk, transaksi, hutang, cashFlow] = await Promise.all([
+      const [pelanggan, supplier, produk, transaksi, detailTransaksi, hutang, pembayaranHutang, cashFlow, pembelian, detailPembelian, kartuStok] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.PELANGGAN))),
+        getDocs(query(collection(db, COLLECTIONS.SUPPLIER))),
         getDocs(query(collection(db, COLLECTIONS.PRODUK))),
         getDocs(query(collection(db, COLLECTIONS.TRANSAKSI), orderBy('tanggal', 'desc'))),
-        getDocs(query(collection(db, COLLECTIONS.HUTANG))),
-        getDocs(query(collection(db, COLLECTIONS.CASH_FLOW), orderBy('tanggal', 'desc')))
-      ])
-
-      const [detailTransaksi, pembayaranHutang] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.DETAIL_TRANSAKSI))),
-        getDocs(query(collection(db, COLLECTIONS.PEMBAYARAN_HUTANG)))
+        getDocs(query(collection(db, COLLECTIONS.HUTANG))),
+        getDocs(query(collection(db, COLLECTIONS.PEMBAYARAN_HUTANG))),
+        getDocs(query(collection(db, COLLECTIONS.CASH_FLOW), orderBy('tanggal', 'desc'))),
+        getDocs(query(collection(db, COLLECTIONS.PEMBELIAN), orderBy('tanggal', 'desc'))),
+        getDocs(query(collection(db, COLLECTIONS.DETAIL_PEMBELIAN))),
+        getDocs(query(collection(db, COLLECTIONS.KARTU_STOK), orderBy('tanggal', 'desc')))
       ])
 
       return NextResponse.json({
         pelanggan: pelanggan.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
+        supplier: supplier.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
         produk: produk.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
         transaksi: transaksi.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
         detailTransaksi: detailTransaksi.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
         hutang: hutang.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
         pembayaranHutang: pembayaranHutang.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        cashFlow: cashFlow.docs.map(d => convertTimestamp({ id: d.id, ...d.data() }))
+        cashFlow: cashFlow.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
+        pembelian: pembelian.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
+        detailPembelian: detailPembelian.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
+        kartuStok: kartuStok.docs.map(d => convertTimestamp({ id: d.id, ...d.data() }))
       })
     }
 
