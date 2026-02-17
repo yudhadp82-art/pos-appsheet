@@ -1,0 +1,27 @@
+{
+  "name": "POS AppSheet",
+  "short_name": "POS App",
+  "description": "Sistem Manajemen Keuangan Lengkap - POS, Hutang, Cash Flow, Laporan",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e40af",
+  "theme_color": "#1e40af",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "id",
+  "dir": "ltr"
+}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS AppSheet - Build APK Instructions</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { color: #1e40af; margin-bottom: 10px; }
+        h2 { color: #1e40af; margin: 30px 0 15px; padding-bottom: 10px; border-bottom: 2px solid #1e40af; }
+        h3 { color: #374151; margin: 20px 0 10px; }
+        p { margin-bottom: 15px; }
+        .card { background: white; border-radius: 12px; padding: 25px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .method { background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; padding: 20px; border-radius: 12px; margin: 15px 0; }
+        .method h3 { color: white; margin-top: 0; }
+        .steps { background: #f8fafc; border-left: 4px solid #1e40af; padding: 15px 20px; margin: 15px 0; border-radius: 0 8px 8px 0; }
+        .steps ol { padding-left: 20px; }
+        .steps li { margin: 10px 0; }
+        code { background: #1e293b; color: #10b981; padding: 2px 8px; border-radius: 4px; font-size: 14px; }
+        pre { background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; margin: 15px 0; }
+        pre code { background: none; padding: 0; }
+        .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .feature { background: #ecfdf5; padding: 15px; border-radius: 8px; border: 1px solid #10b981; }
+        .feature::before { content: '✅ '; }
+        .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .warning::before { content: '⚠️ '; }
+        .download-box { background: #1e40af; color: white; padding: 25px; border-radius: 12px; text-align: center; margin: 25px 0; }
+        .download-box h3 { color: white; margin-bottom: 15px; }
+        .btn { display: inline-block; background: white; color: #1e40af; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 5px; }
+        .btn:hover { background: #f1f5f9; }
+        .tabs { display: flex; gap: 5px; margin: 20px 0; flex-wrap: wrap; }
+        .tab { background: #e2e8f0; padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer; border: none; font-size: 16px; }
+        .tab.active { background: #1e40af; color: white; }
+        .tab-content { display: none; background: white; padding: 20px; border-radius: 0 8px 8px 8px; }
+        .tab-content.active { display: block; }
+        @media (max-width: 600px) {
+            .container { padding: 15px; }
+            .card { padding: 15px; }
+            pre { padding: 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>📱 POS AppSheet - Build APK</h1>
+            <p>Panduan lengkap untuk membangun APK Android dari aplikasi POS AppSheet</p>
+            
+            <div class="download-box">
+                <h3>📦 File yang Tersedia</h3>
+                <p style="margin-bottom: 15px;">Download project Android & Web App</p>
+                <span class="btn">pos-appsheet-android.zip</span>
+                <span class="btn">pos-appsheet-web.zip</span>
+            </div>
+        </div>
+
+        <h2>🎯 Fitur Aplikasi</h2>
+        <div class="feature-grid">
+            <div class="feature">Dashboard Statistik</div>
+            <div class="feature">Manajemen Pelanggan</div>
+            <div class="feature">Produk + Barcode</div>
+            <div class="feature">Transaksi Cash/Hutang</div>
+            <div class="feature">Manajemen Hutang</div>
+            <div class="feature">Arus Kas</div>
+            <div class="feature">Laporan Keuangan</div>
+            <div class="feature">Cetak Nota</div>
+            <div class="feature">Data Offline</div>
+        </div>
+
+        <h2>🔨 Cara Build APK</h2>
+        
+        <div class="method">
+            <h3>Metode 1: Android Studio (PALING MUDAH) ⭐</h3>
+            <p>Tidak perlu command line, cukup GUI saja</p>
+        </div>
+        
+        <div class="steps">
+            <ol>
+                <li><strong>Download Android Studio</strong><br>
+                    Kunjungi: <a href="https://developer.android.com/studio" target="_blank">https://developer.android.com/studio</a></li>
+                <li><strong>Extract</strong> file <code>pos-appsheet-android.zip</code></li>
+                <li><strong>Buka Android Studio</strong> → Pilih "Open an Existing Project"</li>
+                <li>Navigate ke folder <code>android</code> yang sudah di-extract</li>
+                <li>Tunggu Gradle sync selesai (mungkin perlu download dependencies)</li>
+                <li>Menu: <strong>Build</strong> → <strong>Build Bundle(s) / APK(s)</strong> → <strong>Build APK(s)</strong></li>
+                <li>Klik "locate" di notifikasi untuk menemukan APK</li>
+            </ol>
+        </div>
+
+        <div class="method">
+            <h3>Metode 2: Command Line</h3>
+            <p>Menggunakan npx (sudah tersedia dengan Node.js)</p>
+        </div>
+
+        <div class="steps">
+            <h4>A. Install Prerequisites:</h4>
+            <ul>
+                <li>Node.js: <a href="https://nodejs.org">nodejs.org</a></li>
+                <li>JDK 17: <a href="https://adoptium.net">adoptium.net</a></li>
+            </ul>
+            
+            <h4>B. Set Environment Variables (Windows):</h4>
+            <pre><code>set JAVA_HOME=C:\Program Files\Java\jdk-17
+set ANDROID_HOME=C:\Users\%USERNAME%\AppData\Local\Android\Sdk
+set PATH=%PATH%;%JAVA_HOME%\bin;%ANDROID_HOME%\platform-tools</code></pre>
+
+            <h4>C. Set Environment Variables (Mac/Linux):</h4>
+            <pre><code>export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$PATH:$JAVA_HOME/bin:$ANDROID_HOME/platform-tools</code></pre>
+
+            <h4>D. Build APK:</h4>
+            <pre><code>cd android
+./gradlew assembleDebug    # Mac/Linux
+gradlew.bat assembleDebug  # Windows</code></pre>
+        </div>
+
+        <div class="method">
+            <h3>Metode 3: PWA (TANPA APK) 🌐</h3>
+            <p>Install sebagai Progressive Web App</p>
+        </div>
+
+        <div class="steps">
+            <ol>
+                <li>Buka aplikasi di Chrome (Android)</li>
+                <li>Tap menu (⋮) pojok kanan atas</li>
+                <li>Pilih "Add to Home Screen" atau "Install App"</li>
+                <li>Aplikasi akan muncul di home screen</li>
+            </ol>
+        </div>
+
+        <h2>📱 Install APK di Android</h2>
+        <div class="steps">
+            <ol>
+                <li>Transfer file APK ke HP (USB/Email/Cloud)</li>
+                <li>Buka Settings → Security → Enable "Unknown Sources"</li>
+                <li>Buka File Manager → Tap file APK</li>
+                <li>Tap Install</li>
+            </ol>
+        </div>
+
+        <h2>🔧 Troubleshooting</h2>
+        <div class="warning">
+            <strong>Error: JAVA_HOME not found</strong><br>
+            Install JDK 17 dari adoptium.net, lalu set environment variable
+        </div>
+        
+        <div class="warning">
+            <strong>Error: ANDROID_HOME not found</strong><br>
+            Install Android Studio, SDK akan terinstall otomatis
+        </div>
+        
+        <div class="warning">
+            <strong>Error: Gradle permission denied</strong><br>
+            <code>chmod +x android/gradlew</code> (Mac/Linux only)
+        </div>
+
+        <h2>📂 Lokasi File APK</h2>
+        <p>Setelah build berhasil, APK berada di:</p>
+        <pre><code>android/app/build/outputs/apk/debug/app-debug.apk</code></pre>
+
+        <div class="card" style="text-align: center; margin-top: 30px;">
+            <h3>🎉 Selamat Mencoba!</h3>
+            <p style="margin-top: 10px;">POS AppSheet v1.0 - Sistem Manajemen Keuangan Lengkap</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Pelanggan / Customer
+model Pelanggan {
+  id        String   @id @default(cuid())
+  nama      String
+  alamat    String?
+  telepon   String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  transaksi Transaksi[]
+  hutang    Hutang[]
+}
+
+// Produk / Product
+model Produk {
+  id          String   @id @default(cuid())
+  nama        String
+  barcode     String   @unique
+  hargaBeli   Float
+  hargaJual   Float
+  stok        Int      @default(0)
+  kategori    String?
+  deskripsi   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  detailTransaksi DetailTransaksi[]
+}
+
+// Transaksi / Transaction
+model Transaksi {
+  id            String   @id @default(cuid())
+  noNota        String   @unique
+  pelangganId   String?
+  tanggal       DateTime @default(now())
+  subtotal      Float
+  diskon        Float    @default(0)
+  pajak         Float    @default(0)
+  total         Float
+  bayar         Float
+  kembalian     Float    @default(0)
+  metodePembayaran String  @default("CASH") // CASH, HUTANG
+  status        String   @default("LUNAS")  // LUNAS, HUTANG
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  pelanggan      Pelanggan?        @relation(fields: [pelangganId], references: [id])
+  detailTransaksi DetailTransaksi[]
+  hutang         Hutang?
+}
+
+// Detail Transaksi / Transaction Details
+model DetailTransaksi {
+  id          String   @id @default(cuid())
+  transaksiId String
+  produkId    String
+  jumlah      Int
+  harga       Float
+  subtotal    Float
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  transaksi Transaksi @relation(fields: [transaksiId], references: [id], onDelete: Cascade)
+  produk    Produk    @relation(fields: [produkId], references: [id])
+}
+
+// Hutang / Debt
+model Hutang {
+  id           String   @id @default(cuid())
+  pelangganId  String
+  transaksiId  String   @unique
+  totalHutang  Float
+  sisaHutang   Float
+  jatuhTempo   DateTime?
+  status       String   @default("BELUM_LUNAS") // BELUM_LUNAS, LUNAS
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  pelanggan   Pelanggan        @relation(fields: [pelangganId], references: [id])
+  transaksi   Transaksi        @relation(fields: [transaksiId], references: [id])
+  pembayaran  PembayaranHutang[]
+}
+
+// Pembayaran Hutang / Debt Payment
+model PembayaranHutang {
+  id        String   @id @default(cuid())
+  hutangId  String
+  jumlah    Float
+  tanggal   DateTime @default(now())
+  keterangan String?
+  createdAt DateTime @default(now())
+  
+  // Relations
+  hutang Hutang @relation(fields: [hutangId], references: [id], onDelete: Cascade)
+}
+
+// Cash Flow / Arus Kas
+model CashFlow {
+  id          String   @id @default(cuid())
+  tipe        String   // MASUK, KELUAR
+  kategori    String
+  jumlah      Float
+  keterangan  String?
+  tanggal     DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

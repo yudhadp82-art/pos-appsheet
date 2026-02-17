@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Package icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,24L30,36v24l24,12l24,-12V36L54,24zM54,27l18,9l-18,9l-18,-9L54,27zM33,40.5l18,9v15l-18,-9V40.5zM75,40.5v15l-18,9v-15L75,40.5z"/>
+    
+    <!-- Dollar sign -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,52m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0"
+        android:strokeWidth="0"/>
+    
+</vector>

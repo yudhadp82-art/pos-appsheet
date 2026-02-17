@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download POS AppSheet</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: linear-gradient(135deg, #1e40af, #3b82f6); 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            padding: 20px;
+        }
+        .container { 
+            background: white; 
+            border-radius: 20px; 
+            padding: 40px; 
+            max-width: 600px; 
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { 
+            color: #1e40af; 
+            text-align: center; 
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .file-card { 
+            background: #f8fafc; 
+            border: 2px solid #e2e8f0; 
+            border-radius: 12px; 
+            padding: 20px; 
+            margin: 15px 0;
+            transition: all 0.3s;
+        }
+        .file-card:hover {
+            border-color: #3b82f6;
+            transform: translateY(-2px);
+        }
+        .file-name { 
+            font-weight: bold; 
+            font-size: 16px;
+            color: #1e293b;
+            margin-bottom: 5px;
+        }
+        .file-size { 
+            color: #64748b; 
+            font-size: 14px;
+        }
+        .file-desc {
+            color: #475569;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .btn { 
+            display: inline-block;
+            background: linear-gradient(135deg, #1e40af, #3b82f6); 
+            color: white; 
+            padding: 12px 24px; 
+            border-radius: 8px; 
+            text-decoration: none; 
+            font-weight: bold;
+            margin-top: 15px;
+            transition: all 0.3s;
+        }
+        .btn:hover { 
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+        .features {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .features h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .feature {
+            background: #ecfdf5;
+            border: 1px solid #10b981;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #065f46;
+        }
+        .note {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #92400e;
+        }
+        @media (max-width: 500px) {
+            .container { padding: 20px; }
+            .feature-list { grid-template-columns: 1fr; }
+            h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 POS AppSheet</h1>
+        <p class="subtitle">Sistem Manajemen Keuangan Lengkap</p>
+
+        <div class="file-card">
+            <div class="file-name">📦 pos-webview-android.zip</div>
+            <div class="file-size">764 KB</div>
+            <div class="file-desc">Project Android WebView - Siap build APK di Android Studio</div>
+            <a href="/download/pos-webview-android.zip" class="btn" download>⬇️ Download</a>
+        </div>
+
+        <div class="file-card">
+            <div class="file-name">🌐 pos-appsheet-web.zip</div>
+            <div class="file-size">652 KB</div>
+            <div class="file-desc">Web App statis - Bisa di-host atau di-install sebagai PWA</div>
+            <a href="/download/pos-appsheet-web.zip" class="btn" download>⬇️ Download</a>
+        </div>
+
+        <div class="file-card">
+            <div class="file-name">📖 ANDROID_STUDIO_GUIDE.md</div>
+            <div class="file-size">3 KB</div>
+            <div class="file-desc">Panduan lengkap install dan menggunakan Android Studio</div>
+            <a href="/download/ANDROID_STUDIO_GUIDE.md" class="btn" download>⬇️ Download</a>
+        </div>
+
+        <div class="features">
+            <h3>✨ Fitur Aplikasi</h3>
+            <div class="feature-list">
+                <div class="feature">✅ Dashboard</div>
+                <div class="feature">✅ Pelanggan</div>
+                <div class="feature">✅ Produk + Barcode</div>
+                <div class="feature">✅ Transaksi</div>
+                <div class="feature">✅ Hutang</div>
+                <div class="feature">✅ Arus Kas</div>
+                <div class="feature">✅ Laporan</div>
+                <div class="feature">✅ Cetak Nota</div>
+            </div>
+        </div>
+
+        <div class="note">
+            <strong>📌 Langkah Setelah Download:</strong><br>
+            1. Extract file .zip<br>
+            2. Buka Android Studio → File → Open<br>
+            3. Pilih folder "pos-webview-android"<br>
+            4. Build → Build APK(s)<br>
+            5. Install di HP Android! 🎉
+        </div>
+    </div>
+</body>
+</html>
