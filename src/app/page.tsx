@@ -1519,19 +1519,22 @@ export default function POSApp() {
                           createdAt: editSupplier?.createdAt || new Date().toISOString(),
                           updatedAt: new Date().toISOString()
                         }
+                        console.log('Saving supplier:', data)
                         try {
                           if (editSupplier) {
                             await supplierApi.update(editSupplier.id, data)
                             toast.success('Supplier berhasil diupdate')
                           } else {
-                            await supplierApi.create(data)
+                            const result = await supplierApi.create(data)
+                            console.log('Create result:', result)
                             toast.success('Supplier berhasil ditambahkan')
                           }
                           setShowSupplierDialog(false)
                           setEditSupplier(null)
                           fetchAllData()
-                        } catch (error) {
-                          toast.error('Gagal menyimpan supplier')
+                        } catch (error: any) {
+                          console.error('Error saving supplier:', error)
+                          toast.error(`Gagal menyimpan supplier: ${error.message || 'Unknown error'}`)
                         }
                       }} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">

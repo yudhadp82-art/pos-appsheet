@@ -16,9 +16,13 @@ export const db = getFirestore(app)
 // Collection names
 export const COLLECTIONS = {
   PELANGGAN: 'pelanggan',
+  SUPPLIER: 'supplier',
   PRODUK: 'produk',
   TRANSAKSI: 'transaksi',
   DETAIL_TRANSAKSI: 'detailTransaksi',
+  PEMBELIAN: 'pembelian',
+  DETAIL_PEMBELIAN: 'detailPembelian',
+  KARTU_STOK: 'kartuStok',
   HUTANG: 'hutang',
   PEMBAYARAN_HUTANG: 'pembayaranHutang',
   CASH_FLOW: 'cashFlow'
