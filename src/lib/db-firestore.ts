@@ -12,7 +12,14 @@ import {
   Timestamp,
   writeBatch
 } from 'firebase/firestore'
-import { db, COLLECTIONS } from './firebase'
+import { db as firestoreDb, COLLECTIONS } from './firebase'
+
+// Re-export db for use in other modules
+export { firestoreDb as db }
+export { COLLECTIONS }
+
+// Use firestoreDb as db internally
+const db = firestoreDb
 
 // Types
 export interface Pelanggan {
