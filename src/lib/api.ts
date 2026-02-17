@@ -9,6 +9,17 @@ export interface Pelanggan {
   updatedAt?: Date | string
 }
 
+export interface Supplier {
+  id: string
+  kode: string
+  nama: string
+  alamat?: string | null
+  telepon?: string | null
+  email?: string | null
+  createdAt: Date | string
+  updatedAt?: Date | string
+}
+
 export interface Produk {
   id: string
   nama: string
@@ -16,12 +27,56 @@ export interface Produk {
   hargaBeli: number
   hargaJual: number
   stok: number
+  stokMinimum: number  // Stok minimum untuk alert
   kategori?: string | null
   deskripsi?: string | null
   gambar?: string | null  // URL gambar produk
   satuan?: string | null  // Satuan produk (pcs, kg, liter, dll)
+  supplierId?: string | null  // ID supplier utama
   createdAt: Date | string
   updatedAt?: Date | string
+}
+
+export interface Pembelian {
+  id: string
+  noFaktur: string
+  supplierId: string
+  tanggal: Date | string
+  totalHarga: number
+  biayaOngkir: number
+  biayaLain: number
+  grandTotal: number
+  status: string  // LUNAS, HUTANG
+  keterangan?: string | null
+  createdAt: Date | string
+  updatedAt?: Date | string
+  supplier?: Supplier
+  detailPembelian?: DetailPembelian[]
+}
+
+export interface DetailPembelian {
+  id: string
+  pembelianId: string
+  produkId: string
+  jumlah: number
+  hargaBeli: number
+  subtotal: number
+  createdAt?: Date | string
+  produk?: Produk
+}
+
+export interface KartuStok {
+  id: string
+  produkId: string
+  tanggal: Date | string
+  tipe: string  // MASUK, KELUAR
+  referensi: string  // No faktur atau no nota
+  jumlah: number
+  stokSebelum: number
+  stokSesudah: number
+  keterangan?: string | null
+  createdAt: Date | string
+  produk?: Produk
 }
 
 export interface DetailTransaksi {
@@ -92,9 +147,13 @@ export interface CashFlow {
 // Collection names for Firebase
 export const COLLECTIONS = {
   PELANGGAN: 'pelanggan',
+  SUPPLIER: 'supplier',
   PRODUK: 'produk',
   TRANSAKSI: 'transaksi',
   DETAIL_TRANSAKSI: 'detailTransaksi',
+  PEMBELIAN: 'pembelian',
+  DETAIL_PEMBELIAN: 'detailPembelian',
+  KARTU_STOK: 'kartuStok',
   HUTANG: 'hutang',
   PEMBAYARAN_HUTANG: 'pembayaranHutang',
   CASH_FLOW: 'cashFlow'
@@ -193,6 +252,27 @@ export const cashFlowApi = {
 export const backupApi = {
   export: () => apiGet('/backup'),
   import: (data: any) => apiPost('/backup', data)
+}
+
+// Supplier API
+export const supplierApi = {
+  getAll: () => apiGet('/data?type=supplier'),
+  create: (data: Partial<Supplier>) => apiPost('/data', { type: COLLECTIONS.SUPPLIER, data }),
+  update: (id: string, data: Partial<Supplier>) => apiPut('/data', { type: COLLECTIONS.SUPPLIER, id, data }),
+  delete: (id: string) => apiDelete('/data', { type: COLLECTIONS.SUPPLIER, id })
+}
+
+// Pembelian API
+export const pembelianApi = {
+  getAll: () => apiGet('/pembelian'),
+  create: (data: { pembelian: Partial<Pembelian>; detailPembelian: Partial<DetailPembelian>[]; cashFlow?: Partial<CashFlow> }) => 
+    apiPost('/pembelian', data)
+}
+
+// KartuStok API
+export const kartuStokApi = {
+  getAll: () => apiGet('/data?type=kartuStok'),
+  getByProduk: (produkId: string) => apiGet(`/kartu-stok?produkId=${produkId}`)
 }
 
 // Generate Barcode

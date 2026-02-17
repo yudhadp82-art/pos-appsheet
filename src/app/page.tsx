@@ -20,14 +20,17 @@ import {
   DollarSign, TrendingUp, TrendingDown, Receipt, Eye, Phone,
   MapPin, Mail, FileText, Calendar, ArrowUpRight, ArrowDownRight,
   Menu, X, Home, ShoppingCartIcon, Download, Upload, Database,
-  FileJson, FileSpreadsheet, Archive, HardDrive
+  FileJson, FileSpreadsheet, Archive, HardDrive,
+  Truck, ClipboardList, Box, PieChart as PieChartIcon
 } from 'lucide-react'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
 import { 
   type Pelanggan, type Produk, type Transaksi, type DetailTransaksi, 
   type Hutang, type PembayaranHutang, type CashFlow,
+  type Supplier, type Pembelian, type DetailPembelian, type KartuStok,
   pelangganApi, produkApi, transaksiApi, hutangApi, cashFlowApi, backupApi,
+  supplierApi, pembelianApi, kartuStokApi,
   generateBarcode 
 } from '@/lib/api'
 
@@ -46,6 +49,34 @@ interface HutangWithDetails extends Hutang {
 interface CartItem {
   produk: Produk
   jumlah: number
+}
+
+// Pembelian cart item
+interface PembelianCartItem {
+  produk: Produk
+  jumlah: number
+  hargaBeli: number
+}
+
+// Pembelian with details
+interface PembelianWithDetails extends Pembelian {
+  supplier?: Supplier
+  detailPembelian: (DetailPembelian & { produk: Produk })[]
+}
+
+// Kartu Stok with product
+interface KartuStokWithProduk extends KartuStok {
+  produk?: Produk
+}
+
+// Laporan Laba
+interface LaporanLaba {
+  totalPenjualan: number
+  totalHpp: number
+  labaKotor: number
+  labaBersih: number
+  dailyData: { date: string; penjualan: number; hpp: number; laba: number }[]
+  productData: { produkId: string; nama: string; qty: number; penjualan: number; hpp: number; laba: number }[]
 }
 
 // Format currency
@@ -128,6 +159,30 @@ export default function POSApp() {
   const [dariTanggal, setDariTanggal] = useState('')
   const [sampaiTanggal, setSampaiTanggal] = useState('')
 
+  // Supplier state
+  const [supplier, setSupplier] = useState<Supplier[]>([])
+  const [showSupplierDialog, setShowSupplierDialog] = useState(false)
+  const [editSupplier, setEditSupplier] = useState<Supplier | null>(null)
+
+  // Pembelian state
+  const [pembelian, setPembelian] = useState<PembelianWithDetails[]>([])
+  const [showPembelianDialog, setShowPembelianDialog] = useState(false)
+  const [pembelianCart, setPembelianCart] = useState<PembelianCartItem[]>([])
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('')
+  const [ongkir, setOngkir] = useState(0)
+  const [biayaLain, setBiayaLain] = useState(0)
+  const [statusPembelian, setStatusPembelian] = useState('LUNAS')
+  const [keteranganPembelian, setKeteranganPembelian] = useState('')
+
+  // Kartu Stok state
+  const [kartuStok, setKartuStok] = useState<KartuStokWithProduk[]>([])
+  const [filterProdukId, setFilterProdukId] = useState<string>('')
+
+  // Laporan Laba state
+  const [laporanLaba, setLaporanLaba] = useState<LaporanLaba | null>(null)
+  const [laporanDariTanggal, setLaporanDariTanggal] = useState('')
+  const [laporanSampaiTanggal, setLaporanSampaiTanggal] = useState('')
+
   // Fetch all data from Firebase
   const fetchAllData = useCallback(async () => {
     try {
@@ -162,6 +217,29 @@ export default function POSApp() {
       setTransaksi(enrichedTransaksi)
       setHutang(enrichedHutang)
       setCashFlow(data.cashFlow || [])
+      
+      // Process supplier
+      setSupplier(data.supplier || [])
+      
+      // Process pembelian with relations
+      const enrichedPembelian: PembelianWithDetails[] = (data.pembelian || []).map((p: Pembelian) => {
+        const supplierData = data.supplier?.find((s: Supplier) => s.id === p.supplierId)
+        const details = (data.detailPembelian || [])
+          .filter((d: DetailPembelian) => d.pembelianId === p.id)
+          .map((d: DetailPembelian) => {
+            const produkData = data.produk?.find((pr: Produk) => pr.id === d.produkId)
+            return { ...d, produk: produkData! }
+          })
+        return { ...p, supplier: supplierData, detailPembelian: details }
+      })
+      setPembelian(enrichedPembelian)
+      
+      // Process kartu stok with product
+      const enrichedKartuStok: KartuStokWithProduk[] = (data.kartuStok || []).map((ks: KartuStok) => {
+        const produkData = data.produk?.find((p: Produk) => p.id === ks.produkId)
+        return { ...ks, produk: produkData }
+      })
+      setKartuStok(enrichedKartuStok)
     } catch (error) {
       console.error('Error fetching data:', error)
       toast.error('Gagal mengambil data dari server')
@@ -224,10 +302,12 @@ export default function POSApp() {
       hargaBeli: parseFloat(formData.get('hargaBeli') as string) || 0,
       hargaJual: parseFloat(formData.get('hargaJual') as string) || 0,
       stok: parseInt(formData.get('stok') as string) || 0,
+      stokMinimum: parseInt(formData.get('stokMinimum') as string) || 5,
       kategori: formData.get('kategori') as string || undefined,
       deskripsi: formData.get('deskripsi') as string || undefined,
       gambar: formData.get('gambar') as string || undefined,
-      satuan: formData.get('satuan') as string || undefined,
+      satuan: formData.get('satuan') as string || 'pcs',
+      supplierId: formData.get('supplierId') as string || undefined,
       createdAt: editProduk?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -484,6 +564,173 @@ export default function POSApp() {
     }
   }
 
+  // Supplier CRUD
+  const handleSaveSupplier = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const data: Partial<Supplier> = {
+      kode: formData.get('kode') as string,
+      nama: formData.get('nama') as string,
+      alamat: formData.get('alamat') as string || undefined,
+      telepon: formData.get('telepon') as string || undefined,
+      email: formData.get('email') as string || undefined,
+      createdAt: editSupplier?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    try {
+      if (editSupplier) {
+        await supplierApi.update(editSupplier.id, data)
+        toast.success('Supplier berhasil diupdate')
+      } else {
+        await supplierApi.create(data)
+        toast.success('Supplier berhasil ditambahkan')
+      }
+      setShowSupplierDialog(false)
+      setEditSupplier(null)
+      fetchAllData()
+    } catch (error) {
+      toast.error('Gagal menyimpan supplier')
+    }
+  }
+
+  const handleDeleteSupplier = async (id: string) => {
+    if (!confirm('Yakin ingin menghapus supplier ini?')) return
+    try {
+      await supplierApi.delete(id)
+      toast.success('Supplier berhasil dihapus')
+      fetchAllData()
+    } catch (error) {
+      toast.error('Gagal menghapus supplier')
+    }
+  }
+
+  // Pembelian functions
+  const addToPembelianCart = (produk: Produk) => {
+    const existing = pembelianCart.find(item => item.produk.id === produk.id)
+    if (existing) {
+      setPembelianCart(pembelianCart.map(item => 
+        item.produk.id === produk.id 
+          ? { ...item, jumlah: item.jumlah + 1 }
+          : item
+      ))
+    } else {
+      setPembelianCart([...pembelianCart, { produk, jumlah: 1, hargaBeli: produk.hargaBeli }])
+    }
+    toast.success(`${produk.nama} ditambahkan ke pembelian`)
+  }
+
+  const updatePembelianCartQty = (produkId: string, jumlah: number) => {
+    if (jumlah <= 0) {
+      setPembelianCart(pembelianCart.filter(item => item.produk.id !== produkId))
+    } else {
+      setPembelianCart(pembelianCart.map(item =>
+        item.produk.id === produkId ? { ...item, jumlah } : item
+      ))
+    }
+  }
+
+  const updatePembelianCartPrice = (produkId: string, hargaBeli: number) => {
+    setPembelianCart(pembelianCart.map(item =>
+      item.produk.id === produkId ? { ...item, hargaBeli } : item
+    ))
+  }
+
+  const removeFromPembelianCart = (produkId: string) => {
+    setPembelianCart(pembelianCart.filter(item => item.produk.id !== produkId))
+  }
+
+  const pembelianSubtotal = pembelianCart.reduce((sum, item) => sum + (item.hargaBeli * item.jumlah), 0)
+  const pembelianGrandTotal = pembelianSubtotal + ongkir + biayaLain
+
+  const handleCreatePembelian = async () => {
+    if (pembelianCart.length === 0) {
+      toast.error('Keranjang pembelian masih kosong')
+      return
+    }
+
+    if (!selectedSupplier) {
+      toast.error('Pilih supplier untuk pembelian')
+      return
+    }
+
+    try {
+      const noFaktur = `PO${Date.now().toString().slice(-10)}`
+      const now = new Date().toISOString()
+      
+      // Prepare pembelian data
+      const pembelianData = {
+        noFaktur,
+        supplierId: selectedSupplier,
+        tanggal: now,
+        totalHarga: pembelianSubtotal,
+        biayaOngkir: ongkir,
+        biayaLain,
+        grandTotal: pembelianGrandTotal,
+        status: statusPembelian,
+        keterangan: keteranganPembelian || undefined,
+        createdAt: now,
+        updatedAt: now
+      }
+      
+      // Prepare detail pembelian
+      const detailPembelianData = pembelianCart.map(item => ({
+        produkId: item.produk.id,
+        jumlah: item.jumlah,
+        hargaBeli: item.hargaBeli,
+        subtotal: item.hargaBeli * item.jumlah
+      }))
+      
+      // Prepare cash flow if status is LUNAS
+      const cashFlowData = statusPembelian === 'LUNAS' ? {
+        tipe: 'KELUAR' as const,
+        kategori: 'Pembelian',
+        jumlah: pembelianGrandTotal,
+        keterangan: `Pembelian ${noFaktur}`,
+        tanggal: now,
+        createdAt: now
+      } : undefined
+      
+      await pembelianApi.create({
+        pembelian: pembelianData,
+        detailPembelian: detailPembelianData,
+        cashFlow: cashFlowData
+      })
+      
+      toast.success('Pembelian berhasil dibuat')
+      
+      // Reset
+      setPembelianCart([])
+      setSelectedSupplier('')
+      setOngkir(0)
+      setBiayaLain(0)
+      setStatusPembelian('LUNAS')
+      setKeteranganPembelian('')
+      setShowPembelianDialog(false)
+      
+      fetchAllData()
+    } catch (error) {
+      console.error('Error creating pembelian:', error)
+      toast.error('Gagal membuat pembelian')
+    }
+  }
+
+  // Fetch Laporan Laba
+  const fetchLaporanLaba = async () => {
+    try {
+      const params = new URLSearchParams()
+      if (laporanDariTanggal) params.append('dariTanggal', laporanDariTanggal)
+      if (laporanSampaiTanggal) params.append('sampaiTanggal', laporanSampaiTanggal)
+      
+      const response = await fetch(`/api/laporan?${params.toString()}`)
+      const data = await response.json()
+      setLaporanLaba(data)
+    } catch (error) {
+      console.error('Error fetching laporan laba:', error)
+      toast.error('Gagal mengambil laporan laba')
+    }
+  }
+
   // Print nota
   const handlePrintNota = () => {
     const printWindow = window.open('', '_blank')
@@ -640,7 +887,10 @@ export default function POSApp() {
   const navItems = [
     { value: 'dashboard', icon: Home, label: 'Dashboard' },
     { value: 'pelanggan', icon: Users, label: 'Pelanggan' },
+    { value: 'supplier', icon: Truck, label: 'Supplier' },
     { value: 'produk', icon: Package, label: 'Produk' },
+    { value: 'persediaan', icon: Box, label: 'Persediaan' },
+    { value: 'pembelian', icon: ClipboardList, label: 'Pembelian' },
     { value: 'transaksi', icon: ShoppingCartIcon, label: 'Transaksi' },
     { value: 'hutang', icon: CreditCard, label: 'Hutang' },
     { value: 'cash', icon: Wallet, label: 'Cash' },
@@ -1197,6 +1447,139 @@ export default function POSApp() {
                 </Card>
               </TabsContent>
 
+              {/* Supplier Tab */}
+              <TabsContent value="supplier" className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold">Manajemen Supplier</h2>
+                    <p className="text-gray-500 text-sm">Kelola data supplier/pemasok</p>
+                  </div>
+                  <Dialog open={showSupplierDialog} onOpenChange={(open) => { setShowSupplierDialog(open); if (!open) setEditSupplier(null) }}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Tambah Supplier
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>{editSupplier ? 'Edit Supplier' : 'Tambah Supplier Baru'}</DialogTitle>
+                        <DialogDescription>Masukkan data supplier</DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={async (e) => {
+                        e.preventDefault()
+                        const formData = new FormData(e.currentTarget)
+                        const data: Partial<Supplier> = {
+                          kode: formData.get('kode') as string,
+                          nama: formData.get('nama') as string,
+                          alamat: formData.get('alamat') as string || undefined,
+                          telepon: formData.get('telepon') as string || undefined,
+                          email: formData.get('email') as string || undefined,
+                          createdAt: editSupplier?.createdAt || new Date().toISOString(),
+                          updatedAt: new Date().toISOString()
+                        }
+                        try {
+                          if (editSupplier) {
+                            await supplierApi.update(editSupplier.id, data)
+                            toast.success('Supplier berhasil diupdate')
+                          } else {
+                            await supplierApi.create(data)
+                            toast.success('Supplier berhasil ditambahkan')
+                          }
+                          setShowSupplierDialog(false)
+                          setEditSupplier(null)
+                          fetchAllData()
+                        } catch (error) {
+                          toast.error('Gagal menyimpan supplier')
+                        }
+                      }} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Kode Supplier *</Label>
+                            <Input name="kode" defaultValue={editSupplier?.kode || `SUP${Date.now().toString().slice(-6)}`} required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Nama Supplier *</Label>
+                            <Input name="nama" defaultValue={editSupplier?.nama} required />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Alamat</Label>
+                          <Textarea name="alamat" defaultValue={editSupplier?.alamat || ''} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Telepon</Label>
+                            <Input name="telepon" defaultValue={editSupplier?.telepon || ''} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Email</Label>
+                            <Input name="email" type="email" defaultValue={editSupplier?.email || ''} />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" className="w-full">Simpan</Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <Card>
+                  <CardContent className="p-0">
+                    <ScrollArea className="w-full">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Kode</TableHead>
+                            <TableHead>Nama</TableHead>
+                            <TableHead className="hidden sm:table-cell">Telepon</TableHead>
+                            <TableHead className="hidden md:table-cell">Alamat</TableHead>
+                            <TableHead className="text-right">Aksi</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {supplier.map((s) => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-mono text-blue-600">{s.kode}</TableCell>
+                              <TableCell className="font-medium">{s.nama}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{s.telepon || '-'}</TableCell>
+                              <TableCell className="hidden md:table-cell">{s.alamat || '-'}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button variant="outline" size="sm" onClick={() => { setEditSupplier(s); setShowSupplierDialog(true) }}>
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="destructive" size="sm" onClick={async () => {
+                                    if (!confirm('Yakin ingin menghapus supplier ini?')) return
+                                    try {
+                                      await supplierApi.delete(s.id)
+                                      toast.success('Supplier berhasil dihapus')
+                                      fetchAllData()
+                                    } catch (error) {
+                                      toast.error('Gagal menghapus supplier')
+                                    }
+                                  }}>
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {supplier.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                Belum ada data supplier
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
               {/* Produk Tab */}
               <TabsContent value="produk" className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1249,6 +1632,12 @@ export default function POSApp() {
                             <Input id="stok" name="stok" type="number" defaultValue={editProduk?.stok || 0} />
                           </div>
                           <div className="space-y-2">
+                            <Label htmlFor="stokMinimum">Stok Minimum</Label>
+                            <Input id="stokMinimum" name="stokMinimum" type="number" defaultValue={editProduk?.stokMinimum || 5} placeholder="Alert stok rendah" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
                             <Label htmlFor="satuan">Satuan</Label>
                             <Select name="satuan" defaultValue={editProduk?.satuan || 'pcs'}>
                               <SelectTrigger>
@@ -1265,6 +1654,19 @@ export default function POSApp() {
                                 <SelectItem value="pack">Pack</SelectItem>
                                 <SelectItem value="lusin">Lusin</SelectItem>
                                 <SelectItem value="set">Set</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="supplier">Supplier</Label>
+                            <Select name="supplierId" defaultValue={editProduk?.supplierId || ''}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Pilih supplier" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {supplier.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1331,6 +1733,422 @@ export default function POSApp() {
                             <TableRow>
                               <TableCell colSpan={5} className="text-center py-8 text-gray-500">
                                 Belum ada data produk
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Persediaan Tab */}
+              <TabsContent value="persediaan" className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold">Persediaan Barang</h2>
+                    <p className="text-gray-500 text-sm">Kartu stok dan monitoring persediaan</p>
+                  </div>
+                </div>
+
+                {/* Stock Alert */}
+                {produk.filter(p => p.stok <= p.stokMinimum).length > 0 && (
+                  <Card className="border-red-200 bg-red-50">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-red-700">
+                        <Package className="w-5 h-5" />
+                        <span className="font-semibold">Peringatan Stok Rendah!</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {produk.filter(p => p.stok <= p.stokMinimum).map(p => (
+                          <Badge key={p.id} variant="destructive">{p.nama} ({p.stok} {p.satuan || 'pcs'})</Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Stock Summary */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">Total Produk</div>
+                      <div className="text-2xl font-bold">{produk.length}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">Total Stok</div>
+                      <div className="text-2xl font-bold">{produk.reduce((sum, p) => sum + p.stok, 0)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">Nilai Persediaan</div>
+                      <div className="text-2xl font-bold text-green-600">{formatRupiah(produk.reduce((sum, p) => sum + (p.stok * p.hargaBeli), 0))}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">Stok Rendah</div>
+                      <div className="text-2xl font-bold text-red-600">{produk.filter(p => p.stok <= p.stokMinimum).length}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Product Filter for Kartu Stok */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Kartu Stok</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex gap-4">
+                        <Select value={filterProdukId} onValueChange={setFilterProdukId}>
+                          <SelectTrigger className="w-64">
+                            <SelectValue placeholder="Pilih produk..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {produk.map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.nama}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {filterProdukId && (
+                        <ScrollArea className="h-64 border rounded-lg">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Tanggal</TableHead>
+                                <TableHead>Tipe</TableHead>
+                                <TableHead>Referensi</TableHead>
+                                <TableHead className="text-right">Masuk</TableHead>
+                                <TableHead className="text-right">Keluar</TableHead>
+                                <TableHead className="text-right">Stok</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {kartuStok
+                                .filter(ks => ks.produkId === filterProdukId)
+                                .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
+                                .map((ks) => (
+                                  <TableRow key={ks.id}>
+                                    <TableCell>{formatDate(ks.tanggal)}</TableCell>
+                                    <TableCell>
+                                      <Badge variant={ks.tipe === 'MASUK' ? 'default' : 'destructive'}>
+                                        {ks.tipe}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">{ks.referensi}</TableCell>
+                                    <TableCell className="text-right text-green-600">
+                                      {ks.tipe === 'MASUK' ? `+${ks.jumlah}` : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right text-red-600">
+                                      {ks.tipe === 'KELUAR' ? `-${ks.jumlah}` : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right font-semibold">{ks.stokSesudah}</TableCell>
+                                  </TableRow>
+                                ))}
+                              {kartuStok.filter(ks => ks.produkId === filterProdukId).length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="text-center py-4 text-gray-500">
+                                    Belum ada riwayat stok
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Pembelian Tab */}
+              <TabsContent value="pembelian" className="space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-bold">Pembelian Barang</h2>
+                    <p className="text-gray-500 text-sm">Catat pembelian dari supplier</p>
+                  </div>
+                  <Dialog open={showPembelianDialog} onOpenChange={setShowPembelianDialog}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Pembelian Baru
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Buat Pembelian Baru</DialogTitle>
+                        <DialogDescription>Catat pembelian dari supplier</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        {/* Supplier Selection */}
+                        <div className="space-y-2">
+                          <Label>Supplier *</Label>
+                          <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Pilih supplier" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {supplier.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>{s.nama} ({s.kode})</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Product Search */}
+                        <div className="space-y-2">
+                          <Label>Cari Produk</Label>
+                          <Input 
+                            placeholder="Ketik nama produk..." 
+                            value={searchProduk}
+                            onChange={(e) => setSearchProduk(e.target.value)}
+                          />
+                        </div>
+
+                        {/* Product List */}
+                        <ScrollArea className="h-40 border rounded-lg p-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {filteredProduk.slice(0, 8).map((p) => (
+                              <Button 
+                                key={p.id} 
+                                variant="outline" 
+                                className="h-auto py-2 justify-start"
+                                onClick={() => {
+                                  const existing = pembelianCart.find(item => item.produk.id === p.id)
+                                  if (existing) {
+                                    setPembelianCart(pembelianCart.map(item => 
+                                      item.produk.id === p.id 
+                                        ? { ...item, jumlah: item.jumlah + 1 }
+                                        : item
+                                    ))
+                                  } else {
+                                    setPembelianCart([...pembelianCart, { produk: p, jumlah: 1, hargaBeli: p.hargaBeli }])
+                                  }
+                                }}
+                              >
+                                <div className="text-left">
+                                  <div className="font-medium text-xs">{p.nama}</div>
+                                  <div className="text-gray-500 text-xs">{formatRupiah(p.hargaBeli)}</div>
+                                </div>
+                              </Button>
+                            ))}
+                          </div>
+                        </ScrollArea>
+
+                        {/* Cart */}
+                        <div className="border rounded-lg p-3">
+                          <h4 className="font-semibold mb-2">Item Pembelian</h4>
+                          {pembelianCart.length === 0 ? (
+                            <p className="text-gray-500 text-sm text-center py-4">Klik produk untuk menambahkan</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {pembelianCart.map((item) => (
+                                <div key={item.produk.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                                  <div className="flex-1">
+                                    <p className="font-medium text-sm">{item.produk.nama}</p>
+                                    <Input 
+                                      type="number"
+                                      className="h-7 w-24 mt-1"
+                                      value={item.hargaBeli}
+                                      onChange={(e) => {
+                                        setPembelianCart(pembelianCart.map(c => 
+                                          c.produk.id === item.produk.id 
+                                            ? { ...c, hargaBeli: parseFloat(e.target.value) || 0 }
+                                            : c
+                                        ))
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button size="sm" variant="outline" onClick={() => {
+                                      setPembelianCart(pembelianCart.map(c => 
+                                        c.produk.id === item.produk.id 
+                                          ? { ...c, jumlah: c.jumlah - 1 }
+                                          : c
+                                      ).filter(c => c.jumlah > 0))
+                                    }}>-</Button>
+                                    <span className="w-8 text-center">{item.jumlah}</span>
+                                    <Button size="sm" variant="outline" onClick={() => {
+                                      setPembelianCart(pembelianCart.map(c => 
+                                        c.produk.id === item.produk.id 
+                                          ? { ...c, jumlah: c.jumlah + 1 }
+                                          : c
+                                      ))
+                                    }}>+</Button>
+                                    <Button size="sm" variant="destructive" onClick={() => {
+                                      setPembelianCart(pembelianCart.filter(c => c.produk.id !== item.produk.id))
+                                    }}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Costs */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Ongkir</Label>
+                            <Input type="number" value={ongkir} onChange={(e) => setOngkir(parseFloat(e.target.value) || 0)} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Biaya Lain</Label>
+                            <Input type="number" value={biayaLain} onChange={(e) => setBiayaLain(parseFloat(e.target.value) || 0)} />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Status</Label>
+                            <Select value={statusPembelian} onValueChange={setStatusPembelian}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="LUNAS">Lunas</SelectItem>
+                                <SelectItem value="HUTANG">Hutang</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Keterangan</Label>
+                            <Input value={keteranganPembelian} onChange={(e) => setKeteranganPembelian(e.target.value)} />
+                          </div>
+                        </div>
+
+                        {/* Summary */}
+                        <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>Subtotal:</span>
+                            <span>{formatRupiah(pembelianCart.reduce((sum, item) => sum + (item.hargaBeli * item.jumlah), 0))}</span>
+                          </div>
+                          {ongkir > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span>Ongkir:</span>
+                              <span>{formatRupiah(ongkir)}</span>
+                            </div>
+                          )}
+                          {biayaLain > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span>Biaya Lain:</span>
+                              <span>{formatRupiah(biayaLain)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold text-lg border-t pt-2">
+                            <span>Total:</span>
+                            <span>{formatRupiah(pembelianCart.reduce((sum, item) => sum + (item.hargaBeli * item.jumlah), 0) + ongkir + biayaLain)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button 
+                          onClick={async () => {
+                            if (!selectedSupplier || pembelianCart.length === 0) {
+                              toast.error('Pilih supplier dan tambahkan produk')
+                              return
+                            }
+                            try {
+                              const noFaktur = `PO${Date.now().toString().slice(-10)}`
+                              const now = new Date().toISOString()
+                              const subtotal = pembelianCart.reduce((sum, item) => sum + (item.hargaBeli * item.jumlah), 0)
+                              const grandTotal = subtotal + ongkir + biayaLain
+                              
+                              await pembelianApi.create({
+                                pembelian: {
+                                  noFaktur,
+                                  supplierId: selectedSupplier,
+                                  tanggal: now,
+                                  totalHarga: subtotal,
+                                  biayaOngkir: ongkir,
+                                  biayaLain,
+                                  grandTotal,
+                                  status: statusPembelian,
+                                  keterangan: keteranganPembelian || undefined,
+                                  createdAt: now,
+                                  updatedAt: now
+                                },
+                                detailPembelian: pembelianCart.map(item => ({
+                                  produkId: item.produk.id,
+                                  jumlah: item.jumlah,
+                                  hargaBeli: item.hargaBeli,
+                                  subtotal: item.hargaBeli * item.jumlah
+                                })),
+                                cashFlow: statusPembelian === 'LUNAS' ? {
+                                  tipe: 'KELUAR',
+                                  kategori: 'Pembelian Stok',
+                                  jumlah: grandTotal,
+                                  keterangan: `Pembelian ${noFaktur}`,
+                                  tanggal: now,
+                                  createdAt: now
+                                } : undefined
+                              })
+                              
+                              toast.success('Pembelian berhasil dicatat')
+                              setShowPembelianDialog(false)
+                              setPembelianCart([])
+                              setSelectedSupplier('')
+                              setOngkir(0)
+                              setBiayaLain(0)
+                              setStatusPembelian('LUNAS')
+                              setKeteranganPembelian('')
+                              fetchAllData()
+                            } catch (error) {
+                              console.error(error)
+                              toast.error('Gagal mencatat pembelian')
+                            }
+                          }} 
+                          className="w-full"
+                          disabled={pembelianCart.length === 0 || !selectedSupplier}
+                        >
+                          Simpan Pembelian
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                {/* Purchases List */}
+                <Card>
+                  <CardContent className="p-0">
+                    <ScrollArea className="w-full">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>No. Faktur</TableHead>
+                            <TableHead className="hidden sm:table-cell">Tanggal</TableHead>
+                            <TableHead className="hidden md:table-cell">Supplier</TableHead>
+                            <TableHead>Total</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pembelian.map((p) => (
+                            <TableRow key={p.id}>
+                              <TableCell className="font-mono">{p.noFaktur}</TableCell>
+                              <TableCell className="hidden sm:table-cell">{formatDate(p.tanggal)}</TableCell>
+                              <TableCell className="hidden md:table-cell">{p.supplier?.nama || '-'}</TableCell>
+                              <TableCell>{formatRupiah(p.grandTotal)}</TableCell>
+                              <TableCell>
+                                <Badge variant={p.status === 'LUNAS' ? 'default' : 'destructive'}>
+                                  {p.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {pembelian.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                Belum ada data pembelian
                               </TableCell>
                             </TableRow>
                           )}
@@ -1913,128 +2731,236 @@ export default function POSApp() {
               <TabsContent value="laporan" className="space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-bold">Laporan Keuangan</h2>
-                    <p className="text-gray-500 text-sm">Ringkasan keuangan bisnis</p>
+                    <h2 className="text-xl sm:text-2xl font-bold">Laporan Laba Rugi</h2>
+                    <p className="text-gray-500 text-sm">Analisis profitabilitas bisnis</p>
                   </div>
                 </div>
 
                 {/* Date Filter */}
                 <Card>
                   <CardContent className="p-4">
-                    <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4 items-end">
                       <div className="space-y-2 flex-1">
                         <Label>Dari Tanggal</Label>
-                        <Input type="date" value={dariTanggal} onChange={(e) => setDariTanggal(e.target.value)} />
+                        <Input type="date" value={laporanDariTanggal} onChange={(e) => setLaporanDariTanggal(e.target.value)} />
                       </div>
                       <div className="space-y-2 flex-1">
                         <Label>Sampai Tanggal</Label>
-                        <Input type="date" value={sampaiTanggal} onChange={(e) => setSampaiTanggal(e.target.value)} />
+                        <Input type="date" value={laporanSampaiTanggal} onChange={(e) => setLaporanSampaiTanggal(e.target.value)} />
                       </div>
+                      <Button onClick={() => {
+                        // Calculate profit data based on date filter
+                        const filteredTransaksi = transaksi.filter(t => {
+                          const tgl = new Date(t.tanggal).toISOString().split('T')[0]
+                          return (!laporanDariTanggal || tgl >= laporanDariTanggal) && 
+                                 (!laporanSampaiTanggal || tgl <= laporanSampaiTanggal)
+                        })
+
+                        // Calculate totals
+                        const totalPenjualan = filteredTransaksi.reduce((sum, t) => sum + t.total, 0)
+                        const totalHpp = filteredTransaksi.reduce((sum, t) => {
+                          return sum + t.detailTransaksi.reduce((dSum, dt) => {
+                            const prod = dt.produk
+                            return dSum + (prod.hargaBeli * dt.jumlah)
+                          }, 0)
+                        }, 0)
+                        const labaKotor = totalPenjualan - totalHpp
+
+                        // Calculate daily data
+                        const dailyMap: Record<string, { penjualan: number; hpp: number }> = {}
+                        filteredTransaksi.forEach(t => {
+                          const date = new Date(t.tanggal).toISOString().split('T')[0]
+                          if (!dailyMap[date]) dailyMap[date] = { penjualan: 0, hpp: 0 }
+                          dailyMap[date].penjualan += t.total
+                          dailyMap[date].hpp += t.detailTransaksi.reduce((sum, dt) => sum + (dt.produk.hargaBeli * dt.jumlah), 0)
+                        })
+                        const dailyData = Object.entries(dailyMap)
+                          .map(([date, data]) => ({ date, ...data, laba: data.penjualan - data.hpp }))
+                          .sort((a, b) => a.date.localeCompare(b.date))
+
+                        // Calculate product profitability
+                        const productMap: Record<string, { nama: string; qty: number; penjualan: number; hpp: number }> = {}
+                        filteredTransaksi.forEach(t => {
+                          t.detailTransaksi.forEach(dt => {
+                            if (!productMap[dt.produkId]) {
+                              productMap[dt.produkId] = { nama: dt.produk.nama, qty: 0, penjualan: 0, hpp: 0 }
+                            }
+                            productMap[dt.produkId].qty += dt.jumlah
+                            productMap[dt.produkId].penjualan += dt.subtotal
+                            productMap[dt.produkId].hpp += dt.produk.hargaBeli * dt.jumlah
+                          })
+                        })
+                        const productData = Object.entries(productMap)
+                          .map(([produkId, data]) => ({ produkId, ...data, laba: data.penjualan - data.hpp }))
+                          .sort((a, b) => b.laba - a.laba)
+
+                        setLaporanLaba({
+                          totalPenjualan,
+                          totalHpp,
+                          labaKotor,
+                          labaBersih: labaKotor, // Simplified - could add expenses
+                          dailyData,
+                          productData
+                        })
+                      }}>
+                        <BarChart3 className="w-4 h-4 mr-2" />
+                        Generate Laporan
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Profit Summary Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   <Card>
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                          <TrendingUp className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Total Penjualan</p>
-                          <p className="font-bold">{formatRupiah(totalPenjualan)}</p>
-                        </div>
+                      <div className="text-sm text-gray-500">Total Penjualan</div>
+                      <div className="text-xl font-bold text-blue-600">{formatRupiah(laporanLaba?.totalPenjualan || totalPenjualan)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">HPP (Harga Pokok)</div>
+                      <div className="text-xl font-bold text-orange-600">{formatRupiah(laporanLaba?.totalHpp || 0)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="text-sm text-gray-500">Laba Kotor</div>
+                      <div className="text-xl font-bold text-green-600">{formatRupiah(laporanLaba?.labaKotor || 0)}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        Margin: {laporanLaba?.totalPenjualan ? ((laporanLaba.labaKotor / laporanLaba.totalPenjualan) * 100).toFixed(1) : 0}%
                       </div>
                     </CardContent>
                   </Card>
                   <Card>
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <ShoppingCart className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Jumlah Transaksi</p>
-                          <p className="font-bold">{transaksi.length}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-100 rounded-lg">
-                          <CreditCard className="w-5 h-5 text-orange-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Total Piutang</p>
-                          <p className="font-bold">{formatRupiah(totalPiutang)}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                          <Wallet className="w-5 h-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-500">Saldo Kas</p>
-                          <p className="font-bold">{formatRupiah(saldoKas)}</p>
-                        </div>
-                      </div>
+                      <div className="text-sm text-gray-500">Jumlah Transaksi</div>
+                      <div className="text-xl font-bold">{transaksi.length}</div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Daily Profit Chart */}
+                {laporanLaba && laporanLaba.dailyData.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Trend Penjualan</CardTitle>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                        Trend Laba Harian
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ChartContainer config={{ total: { label: 'Total', color: '#3b82f6' } }} className="h-64">
+                      <ChartContainer config={{ 
+                        penjualan: { label: 'Penjualan', color: '#3b82f6' },
+                        hpp: { label: 'HPP', color: '#f97316' },
+                        laba: { label: 'Laba', color: '#22c55e' }
+                      }} className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={salesChartData}>
+                          <LineChart data={laporanLaba.dailyData}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis tickFormatter={(value) => `${(value/1000000).toFixed(1)}jt`} />
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={(value) => `${(value/1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
                             <ChartTooltip content={<ChartTooltipContent />} />
-                            <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                          </BarChart>
+                            <Line type="monotone" dataKey="penjualan" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="hpp" stroke="#f97316" strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="laba" stroke="#22c55e" strokeWidth={2} dot={false} />
+                          </LineChart>
                         </ResponsiveContainer>
                       </ChartContainer>
                     </CardContent>
                   </Card>
+                )}
 
+                {/* Product Profitability Table */}
+                {laporanLaba && laporanLaba.productData.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Top 5 Produk Terlaris</CardTitle>
+                      <CardTitle>Profitabilitas per Produk</CardTitle>
+                      <CardDescription>Produk dengan laba tertinggi</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-3">
-                        {topProducts.slice(0, 5).map((product, index) => (
-                          <div key={product.id} className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
-                                {index + 1}
-                              </span>
-                              <span className="text-sm">{product.nama}</span>
-                            </div>
-                            <span className="font-semibold text-sm">{formatRupiah(product.total)}</span>
-                          </div>
-                        ))}
-                        {topProducts.length === 0 && (
-                          <p className="text-center text-gray-500 py-4">Belum ada data</p>
-                        )}
-                      </div>
+                      <ScrollArea className="h-64">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Produk</TableHead>
+                              <TableHead className="text-right">Qty</TableHead>
+                              <TableHead className="text-right">Penjualan</TableHead>
+                              <TableHead className="text-right">HPP</TableHead>
+                              <TableHead className="text-right">Laba</TableHead>
+                              <TableHead className="text-right">Margin</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {laporanLaba.productData.map((p) => (
+                              <TableRow key={p.produkId}>
+                                <TableCell className="font-medium">{p.nama}</TableCell>
+                                <TableCell className="text-right">{p.qty}</TableCell>
+                                <TableCell className="text-right">{formatRupiah(p.penjualan)}</TableCell>
+                                <TableCell className="text-right text-orange-600">{formatRupiah(p.hpp)}</TableCell>
+                                <TableCell className="text-right font-semibold text-green-600">{formatRupiah(p.laba)}</TableCell>
+                                <TableCell className="text-right">
+                                  <Badge variant={p.laba > 0 ? 'default' : 'destructive'}>
+                                    {p.penjualan > 0 ? ((p.laba / p.penjualan) * 100).toFixed(1) : 0}%
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
                     </CardContent>
                   </Card>
-                </div>
+                )}
+
+                {/* Default Charts when no filter applied */}
+                {!laporanLaba && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Trend Penjualan</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartContainer config={{ total: { label: 'Total', color: '#3b82f6' } }} className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={salesChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="date" />
+                              <YAxis tickFormatter={(value) => `${(value/1000000).toFixed(1)}jt`} />
+                              <ChartTooltip content={<ChartTooltipContent />} />
+                              <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </ChartContainer>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Top 5 Produk Terlaris</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {topProducts.slice(0, 5).map((product, index) => (
+                            <div key={product.id} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm">
+                                  {index + 1}
+                                </span>
+                                <span className="text-sm">{product.nama}</span>
+                              </div>
+                              <span className="font-semibold text-sm">{formatRupiah(product.total)}</span>
+                            </div>
+                          ))}
+                          {topProducts.length === 0 && (
+                            <p className="text-center text-gray-500 py-4">Belum ada data</p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </TabsContent>
 
               {/* Backup Tab */}
