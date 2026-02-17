@@ -1,5 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db-firestore'
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  Timestamp
+} from 'firebase/firestore'
+import { db, COLLECTIONS } from '@/lib/firebase'
+
+const convertTimestamp = (data: any) => {
+  const converted = { ...data }
+  for (const key in converted) {
+    if (converted[key] instanceof Timestamp) {
+      converted[key] = converted[key].toDate().toISOString()
+    }
+  }
+  return converted
+}
 
 // GET - Get profit report with filters
 export async function GET(request: NextRequest) {
@@ -7,27 +24,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const dariTanggal = searchParams.get('dariTanggal')
     const sampaiTanggal = searchParams.get('sampaiTanggal')
-    const tipe = searchParams.get('tipe') || 'harian' // harian, bulanan, produk
 
-    // Get all transactions
-    const transaksiSnapshot = await db.collection('transaksi').get()
-    const transaksiData = transaksiSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    // Get all data
+    const [transaksiSnapshot, detailSnapshot, produkSnapshot, pembelianSnapshot, cashFlowSnapshot] = await Promise.all([
+      getDocs(collection(db, COLLECTIONS.TRANSAKSI)),
+      getDocs(collection(db, COLLECTIONS.DETAIL_TRANSAKSI)),
+      getDocs(collection(db, COLLECTIONS.PRODUK)),
+      getDocs(collection(db, COLLECTIONS.PEMBELIAN)),
+      getDocs(collection(db, COLLECTIONS.CASH_FLOW))
+    ])
 
-    // Get all detail transaksi
-    const detailSnapshot = await db.collection('detailTransaksi').get()
+    const transaksiData = transaksiSnapshot.docs.map(doc => convertTimestamp({ id: doc.id, ...doc.data() }))
     const details = detailSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-
-    // Get all produk
-    const produkSnapshot = await db.collection('produk').get()
     const produkList = produkSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-
-    // Get all pembelian
-    const pembelianSnapshot = await db.collection('pembelian').get()
-    const pembelianData = pembelianSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-
-    // Get all cash flow
-    const cashFlowSnapshot = await db.collection('cashFlow').get()
-    const cashFlowData = cashFlowSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    const pembelianData = pembelianSnapshot.docs.map(doc => convertTimestamp({ id: doc.id, ...doc.data() }))
+    const cashFlowData = cashFlowSnapshot.docs.map(doc => convertTimestamp({ id: doc.id, ...doc.data() }))
 
     // Filter by date range
     let filteredTransaksi = transaksiData
@@ -54,7 +65,7 @@ export async function GET(request: NextRequest) {
     let totalPengeluaran = 0
 
     // Calculate from transactions
-    filteredTransaksi.forEach(t => {
+    filteredTransaksi.forEach((t: any) => {
       totalPenjualan += t.total || 0
       
       // Calculate HPP from detail transaksi
@@ -68,12 +79,12 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate from pembelian
-    filteredPembelian.forEach(p => {
+    filteredPembelian.forEach((p: any) => {
       totalPembelian += p.grandTotal || 0
     })
 
     // Calculate from cash flow
-    filteredCashFlow.forEach(c => {
+    filteredCashFlow.forEach((c: any) => {
       if (c.tipe === 'MASUK' && c.kategori !== 'Penjualan') {
         totalPendapatanLain += c.jumlah || 0
       } else if (c.tipe === 'KELUAR') {
@@ -88,7 +99,7 @@ export async function GET(request: NextRequest) {
     // Group by date for daily report
     const dailyReport: Record<string, { tanggal: string; penjualan: number; hpp: number; labaKotor: number; transaksi: number }> = {}
     
-    filteredTransaksi.forEach(t => {
+    filteredTransaksi.forEach((t: any) => {
       const date = t.tanggal.split('T')[0]
       if (!dailyReport[date]) {
         dailyReport[date] = { tanggal: date, penjualan: 0, hpp: 0, labaKotor: 0, transaksi: 0 }
@@ -109,7 +120,7 @@ export async function GET(request: NextRequest) {
     // Group by product
     const productReport: Record<string, { produkId: string; nama: string; qty: number; penjualan: number; hpp: number; laba: number }> = {}
     
-    filteredTransaksi.forEach(t => {
+    filteredTransaksi.forEach((t: any) => {
       const transDetails = details.filter(d => d.transaksiId === t.id)
       transDetails.forEach(d => {
         const produk = produkList.find(p => p.id === d.produkId)
@@ -148,8 +159,8 @@ export async function GET(request: NextRequest) {
       daily: Object.values(dailyReport).sort((a, b) => b.tanggal.localeCompare(a.tanggal)),
       byProduct: sortedProductReport
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating report:', error)
-    return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
