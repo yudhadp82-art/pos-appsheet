@@ -2983,13 +2983,48 @@ export default function POSApp() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {/* Export All */}
+                      {/* Export Excel */}
+                      <Button 
+                        onClick={async () => {
+                          try {
+                            toast.info('Mengunduh data...')
+                            const response = await fetch('/api/backup-excel')
+                            const data = await response.json()
+                            
+                            // Create XLSX using SheetJS-like approach
+                            const XLSX = await import('xlsx')
+                            const wb = XLSX.utils.book_new()
+                            
+                            // Add each sheet
+                            Object.entries(data.sheets).forEach(([name, sheetData]: [string, any]) => {
+                              if (sheetData.length > 0) {
+                                const ws = XLSX.utils.json_to_sheet(sheetData)
+                                XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31))
+                              }
+                            })
+                            
+                            // Download
+                            XLSX.writeFile(wb, `POS_Backup_${new Date().toISOString().split('T')[0]}.xlsx`)
+                            toast.success('File Excel berhasil diunduh!')
+                          } catch (error) {
+                            console.error(error)
+                            toast.error('Gagal mengekspor ke Excel')
+                          }
+                        }}
+                        className="h-auto py-4 flex-col gap-2 bg-gradient-to-r from-green-600 to-green-700"
+                      >
+                        <FileSpreadsheet className="w-6 h-6" />
+                        <span>Backup Excel</span>
+                        <span className="text-xs opacity-80">Semua data (XLSX)</span>
+                      </Button>
+                      
+                      {/* Export All JSON */}
                       <Button 
                         onClick={handleExportAll}
                         className="h-auto py-4 flex-col gap-2 bg-gradient-to-r from-blue-600 to-blue-700"
                       >
                         <Archive className="w-6 h-6" />
-                        <span>Backup Lengkap</span>
+                        <span>Backup JSON</span>
                         <span className="text-xs opacity-80">Semua data (JSON)</span>
                       </Button>
                       
@@ -3037,6 +3072,79 @@ export default function POSApp() {
                         <span className="text-xs text-gray-500">{cashFlow.length} record (CSV)</span>
                       </Button>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Pembelian per Pelanggan Report */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-purple-600" />
+                      Pembelian per Pelanggan
+                    </CardTitle>
+                    <CardDescription>Ringkasan jumlah pembelian per pelanggan</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-64">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>No. Pelanggan</TableHead>
+                            <TableHead>Nama</TableHead>
+                            <TableHead className="text-right">Total Transaksi</TableHead>
+                            <TableHead className="text-right">Total Qty</TableHead>
+                            <TableHead className="text-right">Total Nilai</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(() => {
+                            const pelangganMap: Record<string, { nama: string; noPelanggan: string; totalTransaksi: number; totalQty: number; totalNilai: number }> = {}
+                            
+                            transaksi.forEach(t => {
+                              if (!t.pelangganId) return
+                              const pel = pelanggan.find(p => p.id === t.pelangganId)
+                              if (!pel) return
+                              
+                              if (!pelangganMap[t.pelangganId]) {
+                                pelangganMap[t.pelangganId] = {
+                                  nama: pel.nama,
+                                  noPelanggan: pel.noPelanggan || '-',
+                                  totalTransaksi: 0,
+                                  totalQty: 0,
+                                  totalNilai: 0
+                                }
+                              }
+                              
+                              pelangganMap[t.pelangganId].totalTransaksi++
+                              pelangganMap[t.pelangganId].totalNilai += t.total || 0
+                              
+                              t.detailTransaksi.forEach(dt => {
+                                pelangganMap[t.pelangganId].totalQty += dt.jumlah
+                              })
+                            })
+                            
+                            return Object.entries(pelangganMap)
+                              .sort((a, b) => b[1].totalNilai - a[1].totalNilai)
+                              .map(([id, data]) => (
+                                <TableRow key={id}>
+                                  <TableCell className="font-mono text-blue-600">{data.noPelanggan}</TableCell>
+                                  <TableCell className="font-medium">{data.nama}</TableCell>
+                                  <TableCell className="text-right">{data.totalTransaksi}</TableCell>
+                                  <TableCell className="text-right">{data.totalQty}</TableCell>
+                                  <TableCell className="text-right font-semibold text-green-600">{formatRupiah(data.totalNilai)}</TableCell>
+                                </TableRow>
+                              ))
+                          })()}
+                          {transaksi.filter(t => t.pelangganId).length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                Belum ada data transaksi pelanggan
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
                   </CardContent>
                 </Card>
 
