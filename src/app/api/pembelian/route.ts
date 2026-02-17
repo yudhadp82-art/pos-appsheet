@@ -56,53 +56,117 @@ export async function GET() {
 // POST - Create new pembelian with details
 export async function POST(request: NextRequest) {
   try {
-    const { pembelian, detailPembelian, cashFlow } = await request.json()
+    const body = await request.json()
+    const { pembelian, detailPembelian, cashFlow } = body
 
+    console.log('=== PEMBELIAN API CALLED ===')
+    console.log('Request body:', JSON.stringify(body, null, 2))
+
+    // Validation
+    if (!pembelian) {
+      console.error('Missing pembelian data')
+      return NextResponse.json({ error: 'Missing pembelian data' }, { status: 400 })
+    }
+
+    if (!detailPembelian || detailPembelian.length === 0) {
+      console.error('Missing detailPembelian')
+      return NextResponse.json({ error: 'Missing detail pembelian' }, { status: 400 })
+    }
+
+    if (!pembelian.supplierId) {
+      console.error('Missing supplierId')
+      return NextResponse.json({ error: 'Supplier ID is required' }, { status: 400 })
+    }
+
+    console.log('Creating pembelian document...')
+    
     const batch = writeBatch(db)
-    const now = new Date().toISOString()
+    const pembelianId = doc(collection(db, COLLECTIONS.PEMBELIAN)).id
+    const pembelianRef = doc(db, COLLECTIONS.PEMBELIAN, pembelianId)
 
     // 1. Create pembelian document
-    const pembelianRef = doc(collection(db, COLLECTIONS.PEMBELIAN))
     batch.set(pembelianRef, {
-      ...pembelian,
-      id: pembelianRef.id,
-      tanggal: Timestamp.fromDate(new Date(pembelian.tanggal || new Date())),
+      id: pembelianId,
+      noFaktur: pembelian.noFaktur || `PO-${Date.now()}`,
+      supplierId: pembelian.supplierId,
+      tanggal: Timestamp.now(),
+      totalHarga: Number(pembelian.totalHarga) || 0,
+      biayaOngkir: Number(pembelian.biayaOngkir) || 0,
+      biayaLain: Number(pembelian.biayaLain) || 0,
+      grandTotal: Number(pembelian.grandTotal) || 0,
+      status: pembelian.status || 'LUNAS',
+      keterangan: pembelian.keterangan || null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     })
 
-    // 2. Create detail pembelian and update stock
-    for (const detail of detailPembelian) {
-      const detailRef = doc(collection(db, COLLECTIONS.DETAIL_PEMBELIAN))
+    console.log('Processing detail items...')
+
+    // 2. Process each detail item
+    for (let i = 0; i < detailPembelian.length; i++) {
+      const detail = detailPembelian[i]
+      console.log(`Processing detail ${i + 1}:`, detail)
+
+      if (!detail.produkId) {
+        console.error('Missing produkId in detail:', detail)
+        return NextResponse.json({ error: `Product ID is missing in item ${i + 1}` }, { status: 400 })
+      }
+
+      // Get current product
+      const produkRef = doc(db, COLLECTIONS.PRODUK, detail.produkId)
+      const produkDoc = await getDoc(produkRef)
+      
+      let currentStok = 0
+      let newStok = Number(detail.jumlah) || 0
+
+      if (produkDoc.exists()) {
+        currentStok = Number(produkDoc.data()?.stok) || 0
+        newStok = currentStok + (Number(detail.jumlah) || 0)
+        
+        console.log(`Updating product ${detail.produkId}: stok ${currentStok} -> ${newStok}`)
+        batch.update(produkRef, {
+          stok: newStok,
+          hargaBeli: Number(detail.hargaBeli) || 0,
+          updatedAt: Timestamp.now()
+        })
+      } else {
+        console.log(`Creating new product: ${detail.produkId}`)
+        batch.set(produkRef, {
+          id: detail.produkId,
+          nama: detail.produkNama || 'Unknown',
+          barcode: `AUTO-${Date.now()}`,
+          hargaBeli: Number(detail.hargaBeli) || 0,
+          hargaJual: Math.round((Number(detail.hargaBeli) || 0) * 1.2),
+          stok: Number(detail.jumlah) || 0,
+          stokMinimum: 0,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
+        })
+      }
+
+      // Create detail pembelian
+      const detailId = doc(collection(db, COLLECTIONS.DETAIL_PEMBELIAN)).id
+      const detailRef = doc(db, COLLECTIONS.DETAIL_PEMBELIAN, detailId)
       batch.set(detailRef, {
-        ...detail,
-        id: detailRef.id,
-        pembelianId: pembelianRef.id,
+        id: detailId,
+        pembelianId: pembelianId,
+        produkId: detail.produkId,
+        jumlah: Number(detail.jumlah) || 0,
+        hargaBeli: Number(detail.hargaBeli) || 0,
+        subtotal: Number(detail.subtotal) || (Number(detail.hargaBeli) * Number(detail.jumlah)) || 0,
         createdAt: Timestamp.now()
       })
 
-      // Get current product stock
-      const produkRef = doc(db, COLLECTIONS.PRODUK, detail.produkId)
-      const produkDoc = await getDoc(produkRef)
-      const currentStok = produkDoc.data()?.stok || 0
-      const newStok = currentStok + detail.jumlah
-
-      // Update product stock and harga beli
-      batch.update(produkRef, {
-        stok: newStok,
-        hargaBeli: detail.hargaBeli,
-        updatedAt: Timestamp.now()
-      })
-
-      // Create kartu stok entry
-      const kartuStokRef = doc(collection(db, COLLECTIONS.KARTU_STOK))
+      // Create kartu stok
+      const kartuStokId = doc(collection(db, COLLECTIONS.KARTU_STOK)).id
+      const kartuStokRef = doc(db, COLLECTIONS.KARTU_STOK, kartuStokId)
       batch.set(kartuStokRef, {
-        id: kartuStokRef.id,
+        id: kartuStokId,
         produkId: detail.produkId,
         tanggal: Timestamp.now(),
         tipe: 'MASUK',
-        referensi: pembelian.noFaktur,
-        jumlah: detail.jumlah,
+        referensi: pembelian.noFaktur || `PO-${Date.now()}`,
+        jumlah: Number(detail.jumlah) || 0,
         stokSebelum: currentStok,
         stokSesudah: newStok,
         keterangan: 'Pembelian dari supplier',
@@ -110,22 +174,43 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 3. Create cash flow if payment is cash
-    if (cashFlow && pembelian.status === 'LUNAS') {
-      const cashFlowRef = doc(collection(db, COLLECTIONS.CASH_FLOW))
+    // 3. Create cash flow if LUNAS
+    if (pembelian.status === 'LUNAS' && pembelian.grandTotal > 0) {
+      console.log('Creating cash flow entry...')
+      const cashFlowId = doc(collection(db, COLLECTIONS.CASH_FLOW)).id
+      const cashFlowRef = doc(db, COLLECTIONS.CASH_FLOW, cashFlowId)
       batch.set(cashFlowRef, {
-        id: cashFlowRef.id,
-        ...cashFlow,
+        id: cashFlowId,
+        tipe: 'KELUAR',
+        kategori: 'Pembelian Stok',
+        jumlah: Number(pembelian.grandTotal) || 0,
+        keterangan: `Pembelian ${pembelian.noFaktur || ''}`,
         tanggal: Timestamp.now(),
         createdAt: Timestamp.now()
       })
     }
 
+    console.log('Committing batch...')
     await batch.commit()
+    console.log('=== PEMBELIAN SAVED SUCCESSFULLY ===')
 
-    return NextResponse.json({ id: pembelianRef.id, success: true })
+    return NextResponse.json({ 
+      success: true, 
+      id: pembelianId,
+      noFaktur: pembelian.noFaktur 
+    })
+
   } catch (error: any) {
-    console.error('Error creating pembelian:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('=== PEMBELIAN ERROR ===')
+    console.error('Error message:', error.message)
+    console.error('Error code:', error.code)
+    console.error('Error stack:', error.stack)
+    console.error('Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
+    
+    return NextResponse.json({ 
+      error: error.message || 'Failed to create pembelian',
+      code: error.code,
+      details: error.toString()
+    }, { status: 500 })
   }
 }

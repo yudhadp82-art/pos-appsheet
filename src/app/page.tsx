@@ -1995,46 +1995,74 @@ export default function POSApp() {
                           ) : (
                             <div className="space-y-2">
                               {pembelianCart.map((item) => (
-                                <div key={item.produk.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                                  <div className="flex-1">
-                                    <p className="font-medium text-sm">{item.produk.nama}</p>
-                                    <Input 
-                                      type="number"
-                                      className="h-7 w-24 mt-1"
-                                      value={item.hargaBeli}
-                                      onChange={(e) => {
+                                <div key={item.produk.id} className="flex items-center justify-between bg-gray-50 p-2 rounded gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate">{item.produk.nama}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-xs text-gray-500">Qty:</span>
+                                      <Input 
+                                        type="number"
+                                        className="h-7 w-16 text-center"
+                                        value={item.jumlah}
+                                        min={1}
+                                        onChange={(e) => {
+                                          const newQty = parseInt(e.target.value) || 1
+                                          setPembelianCart(pembelianCart.map(c => 
+                                            c.produk.id === item.produk.id 
+                                              ? { ...c, jumlah: Math.max(1, newQty) }
+                                              : c
+                                          ))
+                                        }}
+                                      />
+                                      <span className="text-xs text-gray-500">Harga:</span>
+                                      <Input 
+                                        type="number"
+                                        className="h-7 w-28"
+                                        value={item.hargaBeli}
+                                        onChange={(e) => {
+                                          setPembelianCart(pembelianCart.map(c => 
+                                            c.produk.id === item.produk.id 
+                                              ? { ...c, hargaBeli: parseFloat(e.target.value) || 0 }
+                                              : c
+                                          ))
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => {
+                                      if (item.jumlah > 1) {
                                         setPembelianCart(pembelianCart.map(c => 
                                           c.produk.id === item.produk.id 
-                                            ? { ...c, hargaBeli: parseFloat(e.target.value) || 0 }
+                                            ? { ...c, jumlah: c.jumlah - 1 }
                                             : c
                                         ))
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button size="sm" variant="outline" onClick={() => {
-                                      setPembelianCart(pembelianCart.map(c => 
-                                        c.produk.id === item.produk.id 
-                                          ? { ...c, jumlah: c.jumlah - 1 }
-                                          : c
-                                      ).filter(c => c.jumlah > 0))
+                                      }
                                     }}>-</Button>
-                                    <span className="w-8 text-center">{item.jumlah}</span>
-                                    <Button size="sm" variant="outline" onClick={() => {
+                                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" onClick={() => {
                                       setPembelianCart(pembelianCart.map(c => 
                                         c.produk.id === item.produk.id 
                                           ? { ...c, jumlah: c.jumlah + 1 }
                                           : c
                                       ))
                                     }}>+</Button>
-                                    <Button size="sm" variant="destructive" onClick={() => {
+                                    <Button size="sm" variant="destructive" className="h-7 w-7 p-0" onClick={() => {
                                       setPembelianCart(pembelianCart.filter(c => c.produk.id !== item.produk.id))
                                     }}>
-                                      <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-3 h-3" />
                                     </Button>
                                   </div>
                                 </div>
                               ))}
+                              {/* Show subtotal per item */}
+                              <div className="border-t pt-2 mt-2">
+                                {pembelianCart.map((item) => (
+                                  <div key={`subtotal-${item.produk.id}`} className="flex justify-between text-xs text-gray-600">
+                                    <span>{item.produk.nama} ({item.jumlah} x {formatRupiah(item.hargaBeli)})</span>
+                                    <span>{formatRupiah(item.jumlah * item.hargaBeli)}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -2097,17 +2125,32 @@ export default function POSApp() {
                       <DialogFooter>
                         <Button 
                           onClick={async () => {
-                            if (!selectedSupplier || pembelianCart.length === 0) {
-                              toast.error('Pilih supplier dan tambahkan produk')
+                            // Validation
+                            if (!selectedSupplier) {
+                              toast.error('Pilih supplier terlebih dahulu')
                               return
                             }
+                            if (pembelianCart.length === 0) {
+                              toast.error('Tambahkan produk ke keranjang')
+                              return
+                            }
+                            
+                            // Check for valid quantities and prices
+                            const invalidItem = pembelianCart.find(item => item.jumlah <= 0 || item.hargaBeli <= 0)
+                            if (invalidItem) {
+                              toast.error(`Periksa qty/harga untuk: ${invalidItem.produk.nama}`)
+                              return
+                            }
+                            
                             try {
                               const noFaktur = `PO${Date.now().toString().slice(-10)}`
                               const now = new Date().toISOString()
                               const subtotal = pembelianCart.reduce((sum, item) => sum + (item.hargaBeli * item.jumlah), 0)
                               const grandTotal = subtotal + ongkir + biayaLain
                               
-                              await pembelianApi.create({
+                              console.log('Saving pembelian:', { noFaktur, supplierId: selectedSupplier, items: pembelianCart.length, grandTotal })
+                              
+                              const result = await pembelianApi.create({
                                 pembelian: {
                                   noFaktur,
                                   supplierId: selectedSupplier,
@@ -2123,6 +2166,7 @@ export default function POSApp() {
                                 },
                                 detailPembelian: pembelianCart.map(item => ({
                                   produkId: item.produk.id,
+                                  produkNama: item.produk.nama,
                                   jumlah: item.jumlah,
                                   hargaBeli: item.hargaBeli,
                                   subtotal: item.hargaBeli * item.jumlah
@@ -2137,6 +2181,7 @@ export default function POSApp() {
                                 } : undefined
                               })
                               
+                              console.log('Pembelian saved:', result)
                               toast.success('Pembelian berhasil dicatat')
                               setShowPembelianDialog(false)
                               setPembelianCart([])
@@ -2146,9 +2191,9 @@ export default function POSApp() {
                               setStatusPembelian('LUNAS')
                               setKeteranganPembelian('')
                               fetchAllData()
-                            } catch (error) {
-                              console.error(error)
-                              toast.error('Gagal mencatat pembelian')
+                            } catch (error: any) {
+                              console.error('Pembelian error:', error)
+                              toast.error(`Gagal mencatat pembelian: ${error.message || 'Unknown error'}`)
                             }
                           }} 
                           className="w-full"

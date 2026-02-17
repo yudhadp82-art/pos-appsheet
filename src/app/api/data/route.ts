@@ -6,8 +6,6 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  query,
-  orderBy,
   Timestamp
 } from 'firebase/firestore'
 import { db, COLLECTIONS } from '@/lib/firebase'
@@ -23,6 +21,17 @@ const convertTimestamp = (data: any) => {
   return converted
 }
 
+// Helper to safely get collection data
+const safeGetCollection = async (collectionName: string) => {
+  try {
+    const snapshot = await getDocs(collection(db, collectionName))
+    return snapshot.docs.map(d => convertTimestamp({ id: d.id, ...d.data() }))
+  } catch (error) {
+    console.error(`Error fetching ${collectionName}:`, error)
+    return []
+  }
+}
+
 // GET - Fetch all data
 export async function GET(request: NextRequest) {
   try {
@@ -30,41 +39,38 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type')
 
     if (!type) {
-      // Return all data
+      // Return all data - use safe method to handle non-existent collections
       const [pelanggan, supplier, produk, transaksi, detailTransaksi, hutang, pembayaranHutang, cashFlow, pembelian, detailPembelian, kartuStok] = await Promise.all([
-        getDocs(query(collection(db, COLLECTIONS.PELANGGAN))),
-        getDocs(query(collection(db, COLLECTIONS.SUPPLIER))),
-        getDocs(query(collection(db, COLLECTIONS.PRODUK))),
-        getDocs(query(collection(db, COLLECTIONS.TRANSAKSI), orderBy('tanggal', 'desc'))),
-        getDocs(query(collection(db, COLLECTIONS.DETAIL_TRANSAKSI))),
-        getDocs(query(collection(db, COLLECTIONS.HUTANG))),
-        getDocs(query(collection(db, COLLECTIONS.PEMBAYARAN_HUTANG))),
-        getDocs(query(collection(db, COLLECTIONS.CASH_FLOW), orderBy('tanggal', 'desc'))),
-        getDocs(query(collection(db, COLLECTIONS.PEMBELIAN), orderBy('tanggal', 'desc'))),
-        getDocs(query(collection(db, COLLECTIONS.DETAIL_PEMBELIAN))),
-        getDocs(query(collection(db, COLLECTIONS.KARTU_STOK), orderBy('tanggal', 'desc')))
+        safeGetCollection(COLLECTIONS.PELANGGAN),
+        safeGetCollection(COLLECTIONS.SUPPLIER),
+        safeGetCollection(COLLECTIONS.PRODUK),
+        safeGetCollection(COLLECTIONS.TRANSAKSI),
+        safeGetCollection(COLLECTIONS.DETAIL_TRANSAKSI),
+        safeGetCollection(COLLECTIONS.HUTANG),
+        safeGetCollection(COLLECTIONS.PEMBAYARAN_HUTANG),
+        safeGetCollection(COLLECTIONS.CASH_FLOW),
+        safeGetCollection(COLLECTIONS.PEMBELIAN),
+        safeGetCollection(COLLECTIONS.DETAIL_PEMBELIAN),
+        safeGetCollection(COLLECTIONS.KARTU_STOK)
       ])
 
       return NextResponse.json({
-        pelanggan: pelanggan.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        supplier: supplier.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        produk: produk.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        transaksi: transaksi.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        detailTransaksi: detailTransaksi.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        hutang: hutang.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        pembayaranHutang: pembayaranHutang.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        cashFlow: cashFlow.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        pembelian: pembelian.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        detailPembelian: detailPembelian.docs.map(d => convertTimestamp({ id: d.id, ...d.data() })),
-        kartuStok: kartuStok.docs.map(d => convertTimestamp({ id: d.id, ...d.data() }))
+        pelanggan,
+        supplier,
+        produk,
+        transaksi,
+        detailTransaksi,
+        hutang,
+        pembayaranHutang,
+        cashFlow,
+        pembelian,
+        detailPembelian,
+        kartuStok
       })
     }
 
     // Fetch specific collection
-    const collectionRef = collection(db, type)
-    const snapshot = await getDocs(query(collectionRef))
-    const data = snapshot.docs.map(d => convertTimestamp({ id: d.id, ...d.data() }))
-
+    const data = await safeGetCollection(type)
     return NextResponse.json({ data })
   } catch (error: any) {
     console.error('GET error:', error)
@@ -77,6 +83,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { type, data } = body
+
+    console.log('POST request:', { type, data })
 
     if (!type || !data) {
       return NextResponse.json({ error: 'Missing type or data' }, { status: 400 })
@@ -91,10 +99,12 @@ export async function POST(request: NextRequest) {
     }
 
     const docRef = await addDoc(collection(db, type), firestoreData)
+    console.log('Document created:', docRef.id)
+    
     return NextResponse.json({ id: docRef.id, ...firestoreData })
   } catch (error: any) {
     console.error('POST error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message, details: error.toString() }, { status: 500 })
   }
 }
 

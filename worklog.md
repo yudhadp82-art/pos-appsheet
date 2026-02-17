@@ -36,3 +36,22 @@ Stage Summary:
   3. Click "Publish"
 
 ---
+Task ID: 3
+Agent: Main
+Task: Fix Pembelian (Purchase) save functionality
+
+Work Log:
+- Analyzed the Pembelian dialog code
+- Updated `pembelian/route.ts` API to handle errors better
+- Added validation for required fields
+- Added product auto-creation if product doesn't exist
+- Added product name (produkNama) to detailPembelian payload
+- Improved error messages for debugging
+
+Stage Summary:
+- Fixed API route with better error handling
+- Added console.log for debugging
+- Product will be auto-created if not found in database
+- All validation checks in place
+
+---
