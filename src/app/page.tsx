@@ -954,6 +954,47 @@ export default function POSApp() {
     }
   }
 
+  // Export to Excel
+  const handleExportExcel = async () => {
+    try {
+      toast.info('Menyiapkan file Excel...')
+      
+      const response = await fetch('/api/backup-excel')
+      if (!response.ok) {
+        throw new Error('Gagal mengambil data dari server')
+      }
+      
+      const data = await response.json()
+      
+      // Dynamic import xlsx
+      const XLSX = await import('xlsx')
+      
+      // Create workbook
+      const wb = XLSX.utils.book_new()
+      
+      // Add each sheet
+      Object.entries(data.sheets).forEach(([name, sheetData]: [string, any]) => {
+        if (sheetData && sheetData.length > 0) {
+          const ws = XLSX.utils.json_to_sheet(sheetData)
+          // Truncate sheet name to 31 characters (Excel limit)
+          const sheetName = name.substring(0, 31)
+          XLSX.utils.book_append_sheet(wb, ws, sheetName)
+        }
+      })
+      
+      // Generate filename with date
+      const filename = `POS_Backup_${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      // Download file
+      XLSX.writeFile(wb, filename)
+      
+      toast.success(`File ${filename} berhasil diunduh!`)
+    } catch (error: any) {
+      console.error('Excel export error:', error)
+      toast.error(error.message || 'Gagal mengekspor ke Excel')
+    }
+  }
+
   // Export pelanggan
   const handleExportPelanggan = () => {
     const data = pelanggan.map(p => ({
@@ -2985,32 +3026,7 @@ export default function POSApp() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {/* Export Excel */}
                       <Button 
-                        onClick={async () => {
-                          try {
-                            toast.info('Mengunduh data...')
-                            const response = await fetch('/api/backup-excel')
-                            const data = await response.json()
-                            
-                            // Create XLSX using SheetJS-like approach
-                            const XLSX = await import('xlsx')
-                            const wb = XLSX.utils.book_new()
-                            
-                            // Add each sheet
-                            Object.entries(data.sheets).forEach(([name, sheetData]: [string, any]) => {
-                              if (sheetData.length > 0) {
-                                const ws = XLSX.utils.json_to_sheet(sheetData)
-                                XLSX.utils.book_append_sheet(wb, ws, name.substring(0, 31))
-                              }
-                            })
-                            
-                            // Download
-                            XLSX.writeFile(wb, `POS_Backup_${new Date().toISOString().split('T')[0]}.xlsx`)
-                            toast.success('File Excel berhasil diunduh!')
-                          } catch (error) {
-                            console.error(error)
-                            toast.error('Gagal mengekspor ke Excel')
-                          }
-                        }}
+                        onClick={handleExportExcel}
                         className="h-auto py-4 flex-col gap-2 bg-gradient-to-r from-green-600 to-green-700"
                       >
                         <FileSpreadsheet className="w-6 h-6" />
